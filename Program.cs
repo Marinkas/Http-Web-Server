@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Threading;
 
 namespace HttpWebServer
 {
@@ -11,6 +13,7 @@ namespace HttpWebServer
 
         static void Main(string[] args)
         {
+            Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
             Server = new HttpServer();
         }
 
@@ -24,6 +27,17 @@ namespace HttpWebServer
                 offset += array.Length;
             }
             return rv;
+        }
+
+        public static byte[] Compress(byte[] data)
+        {
+            using (var compressedStream = new MemoryStream())
+            using (var zipStream = new GZipStream(compressedStream, CompressionMode.Compress))
+            {
+                zipStream.Write(data, 0, data.Length);
+                zipStream.Close();
+                return compressedStream.ToArray();
+            }
         }
 
         public static string GetMimeType(string extension)

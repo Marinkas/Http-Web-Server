@@ -9,149 +9,142 @@ using System.Globalization;
 
 namespace HttpWebServer
 {
-    public class HttpServer
-    {
-        private int Port = 8080;
-        private int Backlog = 5;
+	public class HttpServer
+	{
+		private int Port = 8080;
+		private int Backlog = 5;
 
-        private TcpListener Listener;
-        private Thread CommThread;
+		private TcpListener Listener;
+		private Thread CommThread;
 
-        private bool Running = false;
+		private bool Running = false;
 
-        public HttpServer()
-        {
-            Port = 8080;
-            Backlog = 5;
+		public HttpServer()
+		{
+			Port = 8080;
+			Backlog = 5;
 
-            Listener = new TcpListener(IPAddress.Any, Port);
-            Listener.Start(Backlog);
+			Listener = new TcpListener(IPAddress.Any, Port);
+			Listener.Start(Backlog);
 
-            Running = true;
+			Running = true;
 
-            CommThread = new Thread(new ThreadStart(Listening));
-            CommThread.Start();
-        }
+			CommThread = new Thread(new ThreadStart(Listening));
+			CommThread.Start();
+		}
 
-        private void Listening()
-        {
-            while (Running)
-            {
-                // Accept incoming connections
-                if (Listener.Pending())
-                {
-                    TcpClient client = Listener.AcceptTcpClient();
-                    HandleClient(client);
-                    client.Close();
-                }
+		private void Listening()
+		{
+			while (Running)
+			{
+				// Accept incoming connections
+				if (Listener.Pending())
+				{
+					TcpClient client = Listener.AcceptTcpClient();
+					ThreadPool.QueueUserWorkItem(HandleClient, client);
+				}
 
-                // Reduce CPU usage
-                Thread.Sleep(50);
-            }
+				// Reduce CPU usage
+				Thread.Sleep(50);
+			}
 
-            Listener.Stop();
-        }
+			Listener.Stop();
+		}
 
-        private void HandleClient(TcpClient client)
-        {
-            NetworkStream stream = client.GetStream();
+		private void HandleClient(object state)
+		{
+			TcpClient client = (TcpClient)state;
 
-            StreamReader reader = new StreamReader(stream);
+			NetworkStream stream = client.GetStream();
 
-            IPEndPoint endPoint = (IPEndPoint)client.Client.RemoteEndPoint;
-            
-            Console.WriteLine("[Request] From: {0}", endPoint.Address.ToString());
+			IPEndPoint endPoint = (IPEndPoint)client.Client.RemoteEndPoint;
+			
+			Console.WriteLine("[Request] From: {0}", endPoint.Address.ToString());
 
-            List<string> Lines = new List<string>();
-            
-            while (reader.Peek() != -1)
-            {
-                string Line = reader.ReadLine();
+			Request request = Request.Parse(stream);
+			Response response = new Response();
 
-                Lines.Add(Line);
-                if (String.IsNullOrEmpty(Line))
-                {
-                    break;
-                }
-            }
+			HandleReq(ref request, ref response);
 
-            Request request = Request.Parse(Lines.ToArray());
-            Response response = new Response();
+			string date = String.Format("{0:ddd,' 'dd' 'MMM' 'yyyy' 'HH':'mm':'ss' 'K}", DateTime.Now, CultureInfo.InvariantCulture);
+			
+			response.Headers.Add("Date", date);
+			response.Headers.Add("Server", "test server");
 
-            HandleReq(ref request, ref response);
+			byte[] returnDat = response.GetBytes();
 
-            //string date = String.Format("{0:ddd,' 'dd' 'MMM' 'yyyy' 'HH':'mm':'ss' 'K}", DateTime.Now, CultureInfo.InvariantCulture);
+			stream.Write(returnDat, 0, returnDat.Length);
+			stream.Flush();
 
-            //response.Headers.Add("Date", date);
-            response.Headers.Add("Server", "test server");
+			client.Close();
+		}
 
-            byte[] returnDat = response.GetBytes();
+		private void HandleReq(ref Request request, ref Response response)
+		{
+			if (request == null)
+			{
+				response.Status = "400 Bad Request";
+				response.Data = new byte[0];
 
-            stream.Write(returnDat, 0, returnDat.Length);
-            stream.Flush();
-        }
+				//response.Headers.Add("Content-Type", "application/octet-stream; charset=UTF-8");
+				//response.Headers.Add("Content-Length", "0");
+			}
+			else
+			{
+				foreach (KeyValuePair<string, string> Cookie in request.Cookies)
+				{
+					Console.WriteLine($"Cookie Name: {Cookie.Key} | Value: {Cookie.Value}");
+				}
 
-        private void HandleReq(ref Request request, ref Response response)
-        {
-            if (request == null)
-            {
-                response.Status = "400 Bad Request";
-                response.Data = new byte[0];
+				if (request.Path == "/")
+				{
+					String file = Environment.CurrentDirectory + "/www/index.html";
+					FileInfo f = new FileInfo(file);
 
-                //response.Headers.Add("Content-Type", "application/octet-stream; charset=UTF-8");
-                //response.Headers.Add("Content-Length", "0");
-            }
-            else
-            {
-                if (request.Path == "/")
-                {
-                    String file = Environment.CurrentDirectory + "/www/index.html";
-                    FileInfo f = new FileInfo(file);
+					Byte[] d = FileBytes(f);
 
-                    Byte[] d = FileBytes(f);
+					response.Status = "200 OK";
+					response.Data = d;
 
-                    response.Status = "200 OK";
-                    response.Data = d;
+					response.Headers.Add("Content-Type", "text/html; charset=UTF-8");
+					response.Headers.Add("Content-Length", d.Length.ToString());
+				}
+				else
+				{
+					String file = Environment.CurrentDirectory + "/www" + request.Path;
+					FileInfo f = new FileInfo(file);
+					if (f.Exists & f.Extension.Contains("."))
+					{
+						string t = Program.GetMimeType(f.Extension);
+						Byte[] d = FileBytes(f);
 
-                    response.Headers.Add("Content-Type", "text/html; charset=UTF-8");
-                    response.Headers.Add("Content-Length", d.Length.ToString());
-                }
-                else
-                {
-                    String file = Environment.CurrentDirectory + "/www" + request.Path;
-                    FileInfo f = new FileInfo(file);
-                    if (f.Exists & f.Extension.Contains("."))
-                    {
-                        string t = Program.GetMimeType(f.Extension);
-                        Byte[] d = FileBytes(f);
+						response.Status = "200 OK";
+						response.Data = d;
 
-                        response.Status = "200 OK";
-                        response.Data = d;
+						response.Headers.Add("Content-Type", String.Format("{0}; charset=UTF-8", t));
+						response.Headers.Add("Content-Length", d.Length.ToString());
+					}
+					else
+					{
+						response.Status = "404 Not Found";
+						response.Data = new byte[0];
 
-                        response.Headers.Add("Content-Type", String.Format("{0}; charset=UTF-8", t));
-                        response.Headers.Add("Content-Length", d.Length.ToString());
-                    }
-                    else
-                    {
-                        response.Status = "404 Not Found";
-                        response.Data = new byte[0];
+						//response.Headers.Add("Content-Type", "application/octet-stream; charset=UTF-8");
+						//response.Headers.Add("Content-Length", "0");
+					}
+				}
+			}
+		}
 
-                        //response.Headers.Add("Content-Type", "application/octet-stream; charset=UTF-8");
-                        //response.Headers.Add("Content-Length", "0");
-                    }
-                }
-            }
-        }
+		private byte[] FileBytes(FileInfo fi)
+		{
+			FileStream fs = fi.OpenRead();
+			BinaryReader reader = new BinaryReader(fs);
+			Byte[] d = new Byte[fs.Length];
+			reader.Read(d, 0, d.Length);
+			fs.Close();
 
-        private byte[] FileBytes(FileInfo fi)
-        {
-            FileStream fs = fi.OpenRead();
-            BinaryReader reader = new BinaryReader(fs);
-            Byte[] d = new Byte[fs.Length];
-            reader.Read(d, 0, d.Length);
-            fs.Close();
-
-            return d;
-        }
-    }
+			return d;
+		}
+	}
 }
