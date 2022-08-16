@@ -11,25 +11,35 @@ namespace HttpWebServer
 {
 	public class HttpServer
 	{
-		private int Port = 8080;
-		private int Backlog = 5;
+		private int Port;
+		private int Backlog;
 
 		private TcpListener Listener;
 		private Thread CommThread;
 
 		private bool Running = false;
 
-		public HttpServer()
-		{
-			Port = 8080;
-			Backlog = 5;
+		private Dictionary<string, string> MimeTypes;
 
-			Listener = new TcpListener(IPAddress.Any, Port);
-			Listener.Start(Backlog);
+		public HttpServer(int Port = 80, int Backlog = 5)
+		{
+			this.Port = Port;
+			this.Backlog = Backlog;
+
+			this.Listener = new TcpListener(IPAddress.Any, this.Port);
+			this.CommThread = new Thread(new ThreadStart(this.Listening));
+
+			this.MimeTypes = new Dictionary<string, string>();
+
+			LoadMimeTypes();
+		}
+
+		public void Start()
+		{
+			Listener.Start(this.Backlog);
 
 			Running = true;
 
-			CommThread = new Thread(new ThreadStart(Listening));
 			CommThread.Start();
 		}
 
@@ -115,7 +125,7 @@ namespace HttpWebServer
 					FileInfo f = new FileInfo(file);
 					if (f.Exists & f.Extension.Contains("."))
 					{
-						string t = Program.GetMimeType(f.Extension);
+						string t = this.GetMimeType(f.Extension);
 						Byte[] d = FileBytes(f);
 
 						response.Status = "200 OK";
@@ -146,5 +156,43 @@ namespace HttpWebServer
 
 			return d;
 		}
-	}
+
+		private void LoadMimeTypes()
+		{
+			string Path = Environment.CurrentDirectory + "\\mime.dat";
+			string[] Lines = File.ReadAllLines(Path);
+
+			for (int i = 0; i < Lines.Length; i++)
+			{
+				string Line = Lines[i];
+
+				if (!string.IsNullOrEmpty(Line) && !string.IsNullOrWhiteSpace(Line))
+				{
+					string[] Args = Line.Split(";");
+
+					string Extension = Args[0].Trim();
+					string MimeType = Args[1].Trim();
+
+					if (!this.MimeTypes.ContainsKey(Extension))
+					{
+						this.MimeTypes.Add(Extension, MimeType);
+					}
+				}
+			}
+		}
+
+        public string GetMimeType(string Extension)
+        {
+            if (Extension == null)
+                throw new ArgumentNullException("extension");
+
+            if (Extension.StartsWith("."))
+				Extension = Extension.Substring(1);
+
+			if (this.MimeTypes.ContainsKey(Extension))
+				return this.MimeTypes[Extension];
+
+			return "application/octet-stream";
+		}
+    }
 }
