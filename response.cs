@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Text;
 
 namespace HttpWebServer
@@ -23,20 +25,24 @@ namespace HttpWebServer
 
         public byte[] GetBytes()
         {
-            string HeaderStr = String.Format("{0} {1}\r\n", Version, Status);
+            string headerStr = String.Format("{0} {1}\r\n", Version, Status);
 
             Console.WriteLine("Version: {0} Status: {1}", Version, Status);
 
             foreach (KeyValuePair<string, string> Header in Headers)
             {
-                HeaderStr = String.Format("{0}{1}: {2}\r\n", HeaderStr, Header.Key, Header.Value);
+                headerStr = String.Format("{0}{1}: {2}\r\n", headerStr, Header.Key, Header.Value);
             }
-            HeaderStr += "\r\n";
+            headerStr += "\r\n";
 
-            byte[] HeaderDat = Encoding.UTF8.GetBytes(HeaderStr);
-            byte[] ReturnBytes = Program.Combine(HeaderDat, Data);
+            byte[] headerBytes = Encoding.UTF8.GetBytes(headerStr);
+            byte[] responsBytes = new byte[headerBytes.Length + this.Data.Length];
 
-            return ReturnBytes;
+            // combine data
+            Buffer.BlockCopy(headerBytes, 0, responsBytes, 0, headerBytes.Length);
+            Buffer.BlockCopy(this.Data, 0, responsBytes, headerBytes.Length, this.Data.Length);
+
+            return responsBytes;
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
+using System.Web;
 
 namespace HttpWebServer
 {
@@ -20,11 +21,26 @@ namespace HttpWebServer
 		public string Host { get; private set; }
 		public string[] Encodings { get; private set; }
 		public Dictionary<string, string> Cookies { get; private set; }
+		public Dictionary<string, string> Query { get; private set; }
+
+		public bool IsBad { get; private set; }
 
 		public Request()
 		{
 			Headers = new Dictionary<string, string>();
 			Cookies = new Dictionary<string, string>();
+		}
+
+		public void ParsePath()
+		{
+			string[] path_query = Path.Split("?");
+			Path = path_query[0].Replace('/', '\\');
+
+			if (path_query.Length > 1)
+			{
+				string query = path_query[1];
+				Query = Request.ParseQuery(query);
+			}
 		}
 
 		public void ParseHeaders()
@@ -73,6 +89,25 @@ namespace HttpWebServer
 			}
 		}
 
+		public static Dictionary<string, string> ParseQuery(string query)
+		{
+			Dictionary<string, string> Query = new Dictionary<string, string>();
+
+			string[] vars = query.Split('&');
+
+			for (int i = 0; i < vars.Length; i++)
+			{
+				string[] pair = vars[i].Split('=');
+
+				string field = HttpUtility.UrlDecode(pair[0]);
+				string value = HttpUtility.UrlDecode(pair[1]);
+
+				Query.Add(field, value);
+			}
+
+			return Query;
+		}
+
 		public static Request Parse(NetworkStream stream)
 		{
 			try
@@ -81,14 +116,19 @@ namespace HttpWebServer
 
 				Request Parsed = new Request();
 
-				string StatusStr = reader.ReadLine();
+				string requestLine = reader.ReadLine();
 
-				if (string.IsNullOrEmpty(StatusStr))
+				if (string.IsNullOrEmpty(requestLine))
 				{
 					return null;
 				}
 
-				string[] Status = StatusStr.Split(" ");
+				if (requestLine.Length > 8000)
+				{
+					return null;
+				}
+
+				string[] Status = requestLine.Split(" ");
 
 				if (Status.Length < 3)
 				{
@@ -99,12 +139,10 @@ namespace HttpWebServer
 				Parsed.Path = Status[1];
 				Parsed.Version = Status[2];
 
-				if (Parsed.Method != "GET" && Parsed.Method != "POST")
+				if (Parsed.Method.ToUpper() != "GET" && Parsed.Method.ToUpper() != "POST")
 				{
 					return null;
 				}
-
-				Console.WriteLine("Method: {0} Path: {1} Version: {2}", Parsed.Method, Parsed.Path, Parsed.Version);
 
 				while (reader.Peek() > -1)
 				{
@@ -133,7 +171,11 @@ namespace HttpWebServer
 					}
 				}
 
+				Parsed.ParsePath();
 				Parsed.ParseHeaders();
+
+				Console.WriteLine("Method: {0} Path: {1} Version: {2}", Parsed.Method, Parsed.Path, Parsed.Version);
+
 				return Parsed;
 			}
 			catch (Exception ex)

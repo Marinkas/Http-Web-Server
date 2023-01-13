@@ -5,7 +5,6 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-using System.Globalization;
 
 namespace HttpWebServer
 {
@@ -16,10 +15,9 @@ namespace HttpWebServer
 
 		private TcpListener Listener;
 		private Thread CommThread;
+		private FileRouter StaticRouter;
 
 		private bool Running = false;
-
-		private Dictionary<string, string> MimeTypes;
 
 		public HttpServer(int Port = 80, int Backlog = 5)
 		{
@@ -29,9 +27,7 @@ namespace HttpWebServer
 			this.Listener = new TcpListener(IPAddress.Any, this.Port);
 			this.CommThread = new Thread(new ThreadStart(this.Listening));
 
-			this.MimeTypes = new Dictionary<string, string>();
-
-			LoadMimeTypes();
+			this.StaticRouter = new FileRouter(Environment.CurrentDirectory + "\\static");
 		}
 
 		public void Start()
@@ -68,7 +64,6 @@ namespace HttpWebServer
 			NetworkStream stream = client.GetStream();
 
 			IPEndPoint endPoint = (IPEndPoint)client.Client.RemoteEndPoint;
-			
 			Console.WriteLine("[Request] From: {0}", endPoint.Address.ToString());
 
 			Request request = Request.Parse(stream);
@@ -76,8 +71,8 @@ namespace HttpWebServer
 
 			HandleReq(ref request, ref response);
 
-			string date = String.Format("{0:ddd,' 'dd' 'MMM' 'yyyy' 'HH':'mm':'ss' 'K}", DateTime.Now, CultureInfo.InvariantCulture);
-			
+			string date = String.Format("{0:ddd,' 'dd' 'MMM' 'yyyy' 'HH':'mm':'ss' 'K}", DateTime.UtcNow);
+
 			response.Headers.Add("Date", date);
 			response.Headers.Add("Server", "test server");
 
@@ -91,108 +86,24 @@ namespace HttpWebServer
 
 		private void HandleReq(ref Request request, ref Response response)
 		{
-			if (request == null)
+			try
 			{
-				response.Status = "400 Bad Request";
-				response.Data = new byte[0];
-
-				//response.Headers.Add("Content-Type", "application/octet-stream; charset=UTF-8");
-				//response.Headers.Add("Content-Length", "0");
-			}
-			else
-			{
-				foreach (KeyValuePair<string, string> Cookie in request.Cookies)
+				if (request == null)
 				{
-					Console.WriteLine($"Cookie Name: {Cookie.Key} | Value: {Cookie.Value}");
-				}
-
-				if (request.Path == "/")
-				{
-					String file = Environment.CurrentDirectory + "/www/index.html";
-					FileInfo f = new FileInfo(file);
-
-					Byte[] d = FileBytes(f);
-
-					response.Status = "200 OK";
-					response.Data = d;
-
-					response.Headers.Add("Content-Type", "text/html; charset=UTF-8");
-					response.Headers.Add("Content-Length", d.Length.ToString());
+					Errors.BadRequest(ref request, ref response);
 				}
 				else
 				{
-					String file = Environment.CurrentDirectory + "/www" + request.Path;
-					FileInfo f = new FileInfo(file);
-					if (f.Exists & f.Extension.Contains("."))
-					{
-						string t = this.GetMimeType(f.Extension);
-						Byte[] d = FileBytes(f);
-
-						response.Status = "200 OK";
-						response.Data = d;
-
-						response.Headers.Add("Content-Type", String.Format("{0}; charset=UTF-8", t));
-						response.Headers.Add("Content-Length", d.Length.ToString());
-					}
-					else
-					{
-						response.Status = "404 Not Found";
-						response.Data = new byte[0];
-
-						//response.Headers.Add("Content-Type", "application/octet-stream; charset=UTF-8");
-						//response.Headers.Add("Content-Length", "0");
-					}
+					// send to file router
+					this.StaticRouter.HandleReq(ref request, ref response);
+					return;
 				}
 			}
-		}
-
-		private byte[] FileBytes(FileInfo fi)
-		{
-			FileStream fs = fi.OpenRead();
-			BinaryReader reader = new BinaryReader(fs);
-			Byte[] d = new Byte[fs.Length];
-			reader.Read(d, 0, d.Length);
-			fs.Close();
-
-			return d;
-		}
-
-		private void LoadMimeTypes()
-		{
-			string Path = Environment.CurrentDirectory + "\\mime.dat";
-			string[] Lines = File.ReadAllLines(Path);
-
-			for (int i = 0; i < Lines.Length; i++)
+			catch (Exception ex)
 			{
-				string Line = Lines[i];
-
-				if (!string.IsNullOrEmpty(Line) && !string.IsNullOrWhiteSpace(Line))
-				{
-					string[] Args = Line.Split(";");
-
-					string Extension = Args[0].Trim();
-					string MimeType = Args[1].Trim();
-
-					if (!this.MimeTypes.ContainsKey(Extension))
-					{
-						this.MimeTypes.Add(Extension, MimeType);
-					}
-				}
+				Console.WriteLine(ex.Message);
+				Errors.InternalServerError(ref request, ref response);
 			}
 		}
-
-        public string GetMimeType(string Extension)
-        {
-            if (Extension == null)
-                throw new ArgumentNullException("extension");
-
-            if (Extension.StartsWith("."))
-				Extension = Extension.Substring(1);
-
-			if (this.MimeTypes.ContainsKey(Extension))
-				return this.MimeTypes[Extension];
-
-			return "application/octet-stream";
-		}
-    }
+	}
 }
