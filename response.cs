@@ -8,39 +8,76 @@ namespace HttpWebServer
 {
     public class Response
     {
-        public string Version { get; private set; }
-        public string Status { get; set; }
+        // status line
+        private string HttpVersion;
+        private string StatusCode;
+        private string ReasonPhrase;
 
-        public Dictionary<string, string> Headers { get; private set; }
-
-        public byte[] Data { get; set; }
+        // the rest of the responce
+        private Dictionary<string, string> Headers;
+        private byte[] Body;
 
         public Response()
         {
-            Version = "HTTP/1.1";
-            Status = "200 OK";
+            this.HttpVersion = "HTTP/1.1";
+            this.StatusCode = "200";
+            this.ReasonPhrase = "OK";
 
-            Headers = new Dictionary<string, string>();
+            this.Headers = new Dictionary<string, string>();
         }
+
+        public void SetStatus(string statusCode, string reasonPhraze)
+		{
+            // very primitive check but it works
+            if (statusCode.Length > 3 || statusCode.Length < 3)
+			{
+                throw new ArgumentOutOfRangeException();
+			}
+
+            this.StatusCode = statusCode;
+            this.ReasonPhrase = reasonPhraze;
+        }
+
+        public void SetHeader(string fieldname, string fieldvalue)
+		{
+            // just to be sure
+            if (this.Headers.ContainsKey(fieldname))
+			{
+                this.Headers[fieldname] = fieldvalue;
+			}
+            else
+			{
+                this.Headers.Add(fieldname, fieldvalue);
+			}
+		}
+
+        public void WriteBody(byte[] body)
+		{
+            // not much about it
+            this.Body = body;
+		}
 
         public byte[] GetBytes()
         {
-            string headerStr = String.Format("{0} {1}\r\n", Version, Status);
+            // writing status line
+            string statusLine = String.Format("{0} {1} {2}\r\n", this.HttpVersion, this.StatusCode, this.ReasonPhrase);
+            Console.WriteLine("Status: {0} {1}", this.StatusCode, this.ReasonPhrase);
 
-            Console.WriteLine("Version: {0} Status: {1}", Version, Status);
-
-            foreach (KeyValuePair<string, string> Header in Headers)
+            // writing headers
+            foreach (KeyValuePair<string, string> header in Headers)
             {
-                headerStr = String.Format("{0}{1}: {2}\r\n", headerStr, Header.Key, Header.Value);
+                statusLine = String.Format("{0}{1}: {2}\r\n", statusLine, header.Key, header.Value);
             }
-            headerStr += "\r\n";
+            // end header
+            statusLine += "\r\n";
 
-            byte[] headerBytes = Encoding.UTF8.GetBytes(headerStr);
-            byte[] responsBytes = new byte[headerBytes.Length + this.Data.Length];
+            // get header and responce bytes
+            byte[] headerBytes = Encoding.UTF8.GetBytes(statusLine);
+            byte[] responsBytes = new byte[headerBytes.Length + this.Body.Length];
 
             // combine data
             Buffer.BlockCopy(headerBytes, 0, responsBytes, 0, headerBytes.Length);
-            Buffer.BlockCopy(this.Data, 0, responsBytes, headerBytes.Length, this.Data.Length);
+            Buffer.BlockCopy(this.Body, 0, responsBytes, headerBytes.Length, this.Body.Length);
 
             return responsBytes;
         }

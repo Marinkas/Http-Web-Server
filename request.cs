@@ -174,7 +174,7 @@ namespace HttpWebServer
 				Parsed.ParsePath();
 				Parsed.ParseHeaders();
 
-				Console.WriteLine("Method: {0} Path: {1} Version: {2}", Parsed.Method, Parsed.Path, Parsed.Version);
+				Console.WriteLine("Method: {0} | Path: {1} | Version: {2}", Parsed.Method, Parsed.Path, Parsed.Version);
 
 				return Parsed;
 			}

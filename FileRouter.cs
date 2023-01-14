@@ -27,6 +27,12 @@ namespace HttpWebServer
 			// file or folder path
 			string path = this.root + request.Path.Trim();
 
+			if (!VerifyPathUnderRoot(path, this.root))
+			{
+				Errors.BadRequest(ref request, ref response);
+				return;
+			}
+
 			// if its a directory
 			if (Directory.Exists(path))
 			{
@@ -73,7 +79,7 @@ namespace HttpWebServer
 				SendFile(path, ref request, ref response);
 				return;
 			}
-			// special case for html files
+			// special case for html files make this apply to all file formats later
 			else if (File.Exists(path + ".html"))
 			{
 				SendFile(path + ".html", ref request, ref response);
@@ -98,14 +104,15 @@ namespace HttpWebServer
 			string t = this.GetMimeType(f.Extension);
 
 			Byte[] d = FileBytes(f);
-			d = Compress(d); // later versions sould only apply gzip for text files
+			//d = Compress(d); // later versions sould only apply diffrent compression algorythms depending on the file format
 
-			response.Status = "200 OK";
-			response.Data = d;
+			response.SetStatus("200", "OK");
 
-			response.Headers.Add("Content-Encoding", "gzip");
-			response.Headers.Add("Content-Length", d.Length.ToString());
-			response.Headers.Add("Content-Type", String.Format("{0}; charset=UTF-8", t));
+			response.WriteBody(d);
+
+			//response.SetHeader("Content-Encoding", "gzip");
+			response.SetHeader("Content-Length", d.Length.ToString());
+			response.SetHeader("Content-Type", String.Format("{0}; charset=UTF-8", t));
 		}
 
 		private byte[] FileBytes(FileInfo fi)
@@ -128,6 +135,13 @@ namespace HttpWebServer
 				zipStream.Close();
 				return compressedStream.ToArray();
 			}
+		}
+
+		private static bool VerifyPathUnderRoot(string pathToVerify, string rootPath = ".")
+		{
+			var fullRoot = Path.GetFullPath(rootPath);
+			var fullPathToVerify = Path.GetFullPath(pathToVerify);
+			return fullPathToVerify.StartsWith(fullRoot);
 		}
 
 		public string GetMimeType(string Extension)

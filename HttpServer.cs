@@ -71,10 +71,10 @@ namespace HttpWebServer
 
 			HandleReq(ref request, ref response);
 
-			string date = String.Format("{0:ddd,' 'dd' 'MMM' 'yyyy' 'HH':'mm':'ss' 'K}", DateTime.UtcNow);
+			string date = String.Format("{0:ddd,' 'dd' 'MMM' 'yyyy' 'HH':'mm':'ss' GMT'}", DateTime.UtcNow);
 
-			response.Headers.Add("Date", date);
-			response.Headers.Add("Server", "test server");
+			response.SetHeader("Date", date);
+			response.SetHeader("Server", "test server");
 
 			byte[] returnDat = response.GetBytes();
 
