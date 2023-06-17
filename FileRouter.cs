@@ -27,13 +27,14 @@ namespace HttpWebServer
 			// file or folder path
 			string path = this.root + request.Path.Trim();
 
+			// prevent relative path exploit
 			if (!VerifyPathUnderRoot(path, this.root))
 			{
 				Errors.BadRequest(ref request, ref response);
 				return;
 			}
 
-			// if its a directory
+			// first check if its a directory
 			if (Directory.Exists(path))
 			{
 				// send the directory's index file or 404
@@ -72,7 +73,7 @@ namespace HttpWebServer
 				return;
 			}
 
-			// if its a file
+			// second check if its a file
 			if (File.Exists(path))
 			{
 				// return the file
@@ -101,18 +102,29 @@ namespace HttpWebServer
 				return;
 			}
 
-			string t = this.GetMimeType(f.Extension);
+			string ext = f.Extension.ToLower();
+			string t = this.GetMimeType(ext);
 
 			Byte[] d = FileBytes(f);
-			//d = Compress(d); // later versions sould only apply diffrent compression algorythms depending on the file format
 
 			response.SetStatus("200", "OK");
 
-			response.WriteBody(d);
+			// make sure we only gzip text files and the favicon
+			if (t.Contains("text") | ext == ".ico")
+			{
+				d = GzipCompress(d);
 
-			//response.SetHeader("Content-Encoding", "gzip");
+				response.SetHeader("Content-Encoding", "gzip");
+				response.SetHeader("Content-Type", String.Format("{0}; charset=UTF-8", t));
+			}
+			else
+			{
+				response.SetHeader("Content-Type", t);
+			}
+
 			response.SetHeader("Content-Length", d.Length.ToString());
-			response.SetHeader("Content-Type", String.Format("{0}; charset=UTF-8", t));
+
+			response.WriteBody(d);
 		}
 
 		private byte[] FileBytes(FileInfo fi)
@@ -126,7 +138,7 @@ namespace HttpWebServer
 			return d;
 		}
 
-		public static byte[] Compress(byte[] data)
+		public static byte[] GzipCompress(byte[] data)
 		{
 			using (var compressedStream = new MemoryStream())
 			using (var zipStream = new GZipStream(compressedStream, CompressionMode.Compress))
@@ -227,7 +239,7 @@ namespace HttpWebServer
 
 				if (Regex.IsMatch(line, @"^[A-Za-z0-9]+\.[A-Za-z0-9]+$")) // basic check to filter out invalid lines
 				{
-					parsedLines.Add(line);
+					parsedLines.Add(line.ToLower());
 				}
 			}
 

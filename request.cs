@@ -22,6 +22,7 @@ namespace HttpWebServer
 		public string[] Encodings { get; private set; }
 		public Dictionary<string, string> Cookies { get; private set; }
 		public Dictionary<string, string> Query { get; private set; }
+		public string ClientType { get; private set; }
 
 		public bool IsBad { get; private set; }
 
@@ -82,6 +83,9 @@ namespace HttpWebServer
 							Cookies.Add(Cookie[0], Cookie[1]);
 						}
 
+						break;
+					case "User-Agent":
+						ClientType = Header.Value;
 						break;
 					default:
 						break;

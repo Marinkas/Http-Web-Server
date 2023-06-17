@@ -69,6 +69,8 @@ namespace HttpWebServer
 			Request request = Request.Parse(stream);
 			Response response = new Response();
 
+			Console.WriteLine("Client: {0}", request.ClientType);
+
 			HandleReq(ref request, ref response);
 
 			string date = String.Format("{0:ddd,' 'dd' 'MMM' 'yyyy' 'HH':'mm':'ss' GMT'}", DateTime.UtcNow);
